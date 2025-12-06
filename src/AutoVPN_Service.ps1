@@ -1,4 +1,4 @@
-﻿# 妾旀鍚嶇ū: D:\Program Files\script\src\AutoVPN_Service.ps1
+﻿# Original location: D:\Program Files\script\src\AutoVPN_Service.ps1
 
 # --- Configuration ---
 # Determine project root (parent of this script's folder) so scripts are relocatable
@@ -27,10 +27,10 @@ try {
 }
 
 # --- Initialization ---
-# 1. 瀵叆 PID
+# 1. Record current process ID to PID file
 $PID | Out-File -FilePath $PidFile -Force
 
-# 2. 瑷畾鐩寗
+# 2. Set working directory
 Set-Location $WorkDir
 
 Write-Log "=== VPN monitor started (Service PID: $PID) ==="
@@ -94,8 +94,8 @@ while ($true) {
     Write-Log "Attempting to connect to $Server ..."
     
     try {
-        # 鍟熷嫊 OpenConnect
-        # 浣跨敤鍙冩暩闄ｅ垪閬垮厤琛岀簩琛?(backtick) 灏庤嚧瑾炴硶鍟忛
+        # Start OpenConnect
+        # Build argument list for OpenConnect; be careful with quoting/escaping
         $ocArgs = @(
             '--protocol=gp',
             "--user=$User",
