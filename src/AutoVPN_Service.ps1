@@ -35,32 +35,59 @@ Set-Location $WorkDir
 
 Write-Log "=== VPN monitor started (Service PID: $PID) ==="
 
-# Credential handling: prefer credential in the script folder, fall back to $WorkDir
-$CredCandidates = @((Join-Path $ScriptDir 'vpn_cred.xml'), (Join-Path $WorkDir 'vpn_cred.xml'))
-$CredFile = $CredCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+$SetCredScript = Join-Path $ScriptDir 'Set_VPN_Credential.ps1'
 
-# If credentials file exists, import it. Otherwise instruct user to run interactive setup and exit.
-if ($CredFile) {
-    try {
-        $credential = Import-Clixml -Path $CredFile
-        if ($credential -is [System.Management.Automation.PSCredential]) {
-            $User = $credential.UserName
-            $Password = SecureStringToPlainText $credential.Password
-        } else {
-            Write-Log "Invalid credential file format: $CredFile"
-            Write-Host "Credential file invalid. Please run Set_VPN_Credential.bat to recreate credentials." -ForegroundColor Yellow
-            exit
-        }
-    } catch {
-        Write-Log ("Failed to import credential file {0}: {1}" -f $CredFile, $_)
-        Write-Host "Failed to read credential file. Please run Set_VPN_Credential.bat to recreate credentials." -ForegroundColor Yellow
+function Invoke-CredentialSetup {
+    param([Parameter(Mandatory = $true)] [string] $SetupScript)
+
+    if (-not (Test-Path $SetupScript)) {
+        Write-Log ("Credential setup script missing: {0}" -f $SetupScript)
+        Write-Host "Credential setup script not found: $SetupScript" -ForegroundColor Red
         exit
     }
-} else {
-    Write-Log "No credential file found in script or work dir. Service will not start." 
-    Write-Host "No credential found. Please run 'Set_VPN_Credential.bat' (double-click) to enter and save credentials to the script folder or root folder." -ForegroundColor Yellow
+
+    Write-Log ("Launching credential setup: {0}" -f $SetupScript)
+    Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$SetupScript`"" -Wait -WindowStyle Normal
+}
+
+function Load-Credential {
+    param([Parameter(Mandatory = $true)] [string[]] $Candidates)
+
+    $credPath = $Candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $credPath) { return $null }
+
+    try {
+        $cred = Import-Clixml -Path $credPath
+        if ($cred -is [System.Management.Automation.PSCredential]) {
+            return @{ Path = $credPath; Credential = $cred }
+        }
+        Write-Log "Imported credential was not a PSCredential object."
+    } catch {
+        Write-Log ("Failed to import credential file {0}: {1}" -f $credPath, $_)
+    }
+
+    return $null
+}
+
+# Credential handling: prefer credential in the script folder, fall back to $WorkDir
+$CredCandidates = @((Join-Path $ScriptDir 'vpn_cred.xml'), (Join-Path $WorkDir 'vpn_cred.xml'))
+$CredData = Load-Credential -Candidates $CredCandidates
+
+if (-not $CredData) {
+    Write-Log "No valid credential found. Triggering interactive setup."
+    Invoke-CredentialSetup -SetupScript $SetCredScript
+    $CredData = Load-Credential -Candidates $CredCandidates
+}
+
+if (-not $CredData) {
+    Write-Host "Credential setup did not complete successfully. Service will exit." -ForegroundColor Yellow
     exit
 }
+
+$CredFile = $CredData.Path
+$credential = $CredData.Credential
+$User = $credential.UserName
+$Password = SecureStringToPlainText $credential.Password
 
 # --- Main Loop ---
 while ($true) {
