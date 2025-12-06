@@ -75,7 +75,7 @@ function Test-VpnCredential {
 
 Write-Host "VPN Credential Setup"
 
-do {
+while ($true) {
     $User = Read-Host "Enter VPN username"
     $Password = Read-Host -AsSecureString "Enter VPN password"
 
@@ -98,7 +98,7 @@ do {
         Write-Host "Failed to save credential: $_" -ForegroundColor Red
         if (Get-Command Write-Log -ErrorAction SilentlyContinue) { Write-Log ("Failed to save credential: {0}" -f $_) }
     }
-} while ($true)
+}
 
 Write-Host "Setup complete. You can now run Start_VPN.bat to start the service (hidden)."
 Start-Sleep -Seconds 2
