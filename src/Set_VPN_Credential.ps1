@@ -1,4 +1,4 @@
-# Interactive credential setup for VPN
+﻿# Interactive credential setup for VPN
 # Run this script in a visible PowerShell window (double-click the .bat wrapper)
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition

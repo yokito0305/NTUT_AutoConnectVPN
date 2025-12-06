@@ -17,13 +17,13 @@ if not defined CRED_FOUND (
     powershell -NoProfile -Command "Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','\"%PS_SETUP%\"' -Verb RunAs -Wait -WindowStyle Normal"
 )
 
-:: 再次確認憑證存在才啟動隱藏的服務腳本
+:: Verify credentials exist before launching the hidden service script
 set "CRED_CONFIRMED="
 for %%F in ("%CRED_ROOT%" "%CRED_SRC%") do if exist %%~fF set "CRED_CONFIRMED=1"
 if defined CRED_CONFIRMED (
     powershell -NoProfile -Command "Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','\"%PS_SERVICE%\"' -Verb RunAs -WindowStyle Hidden"
 ) else (
-    echo 找不到 vpn_cred.xml，服務不會啟動。
+    echo vpn_cred.xml not found, service will not start.
 )
 
 exit /b

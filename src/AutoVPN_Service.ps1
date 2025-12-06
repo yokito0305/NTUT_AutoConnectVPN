@@ -36,6 +36,7 @@ Set-Location $WorkDir
 Write-Log "=== VPN monitor started (Service PID: $PID) ==="
 
 $SetCredScript = Join-Path $ScriptDir 'Set_VPN_Credential.ps1'
+$StatusScript = Join-Path $ScriptDir 'Check_VPN_Status.ps1'
 
 function Invoke-CredentialSetup {
     param([Parameter(Mandatory = $true)] [string] $SetupScript)
@@ -130,8 +131,24 @@ while ($true) {
             Start-Sleep -Seconds 3
             if (-not $proc.HasExited) {
                 Write-Log ("Connected: OpenConnect running (PID: {0})" -f $proc.Id)
+                # Launch status window to inform user of successful connection
+                if (Test-Path $StatusScript) {
+                    Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-File',"`"$StatusScript`"" -WindowStyle Normal
+                }
             } else {
-                Write-Log ("OpenConnect exited immediately (ExitCode: {0})" -f $proc.ExitCode)
+                # Process exited immediately: treat as authentication/login failure and exit service
+                Write-Log ("Authentication/login failed: OpenConnect exited immediately (ExitCode: {0})" -f $proc.ExitCode)
+                if (Test-Path $StatusScript) {
+                    Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-File',"`"$StatusScript`"" -WindowStyle Normal
+                }
+                # Clean up PID file then exit (do not retry)
+                try {
+                    if (Test-Path $PidFile) { Remove-Item $PidFile -ErrorAction SilentlyContinue; Write-Log ("Removed PID file: {0}" -f $PidFile) }
+                } catch {
+                    Write-Log ("Failed to remove PID file: {0}" -f $_)
+                }
+                Write-Log "Service exiting due to authentication/login failure."
+                exit 1
             }
 
             # wait for exit (blocks until disconnected)

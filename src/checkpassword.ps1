@@ -1,4 +1,4 @@
-# 載入共用函式（如果已存在於 src\lib）
+﻿# 載入共用函式（如果已存在於 src\lib）
 . .\src\lib\vpn_common.ps1
 
 # 匯入憑證物件

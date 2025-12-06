@@ -1,4 +1,4 @@
-# File: D:\Program Files\script\src\Check_VPN_Status.ps1
+﻿# File: D:\Program Files\script\src\Check_VPN_Status.ps1
 
 Clear-Host
 Write-Host "=== VPN Background Service Status Check ===" -ForegroundColor Cyan
