@@ -1,3 +1,4 @@
 .vscode/
 *.xml
 *.log
+vpn_service.pid
