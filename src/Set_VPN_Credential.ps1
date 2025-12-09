@@ -18,7 +18,7 @@ $env:LOGFILE = $LogFile
 function Test-VpnCredential {
     param(
         [Parameter(Mandatory = $true)] [string] $User,
-        [Parameter(Mandatory = $true)] [System.Security.SecureString] $Password,
+        [Parameter(Mandatory = $true)] [string] $Password,
         [Parameter(Mandatory = $true)] [string] $Executable,
         [Parameter(Mandatory = $true)] [string] $Server,
         [int] $TimeoutSeconds = 20
@@ -29,7 +29,7 @@ function Test-VpnCredential {
         return $false
     }
 
-    $plainPassword = SecureStringToPlainText $Password
+    $plainPassword = $Password
     $ocArgs = @(
         '--protocol=gp',
         "--user=$User",
@@ -77,10 +77,10 @@ Write-Host "VPN Credential Setup"
 
 while ($true) {
     $User = Read-Host "Enter VPN username"
-    $Password = Read-Host -AsSecureString "Enter VPN password"
+    $PlainPassword = Read-Host "Enter VPN password"
 
     Write-Host "驗證中，請稍候 ..." -ForegroundColor Cyan
-    $isValid = Test-VpnCredential -User $User -Password $Password -Executable $OpenConnectExe -Server $Server
+    $isValid = Test-VpnCredential -User $User -Password $PlainPassword -Executable $OpenConnectExe -Server $Server
 
     if (-not $isValid) {
         Write-Host "登入失敗，請重新輸入帳號與密碼。" -ForegroundColor Red
@@ -88,7 +88,9 @@ while ($true) {
         continue
     }
 
-    $cred = New-Object System.Management.Automation.PSCredential ($User, $Password)
+    # Convert plaintext password to SecureString and create credential
+    $SecurePassword = ConvertTo-SecureString -String $PlainPassword -AsPlainText -Force
+    $cred = New-Object System.Management.Automation.PSCredential ($User, $SecurePassword)
     try {
         $cred | Export-Clixml -Path $CredFile
         Write-Host "Credential saved to $CredFile"
