@@ -1,0 +1,108 @@
+name: Build OpenConnect
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 0' # 每週日自動執行
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2 Environment
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git
+            curl
+            base-devel
+            autotools
+            automake
+            autoconf
+            libtool
+            pkg-config
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-libxml2
+            mingw-w64-x86_64-gnutls
+            mingw-w64-x86_64-lz4
+            mingw-w64-x86_64-zlib
+            mingw-w64-x86_64-libproxy
+
+      - name: Clone OpenConnect Source
+        run: |
+          echo "Cloning OpenConnect..."
+          git clone --depth 1 https://gitlab.com/openconnect/openconnect.git source_code
+
+      - name: Download Official vpnc-script
+        run: |
+          echo "Downloading vpnc-script-win.js..."
+          curl -o source_code/vpnc-script-win.js https://gitlab.com/openconnect/vpnc-scripts/-/raw/master/vpnc-script-win.js
+
+      - name: Configure and Build
+        run: |
+          # [Codex 建議] 強制優先使用 MinGW64 binary 路徑，避免混用
+          export PATH="/mingw64/bin:$PATH"
+          
+          cd source_code
+          ./autogen.sh
+          
+          # [Codex 建議] 設定 vpnc-script 預設路徑
+          # 這裡我們使用相對路徑 'vpnc-script-win.js'，
+          # 這樣只要腳本跟 exe 在同一層目錄，理論上就能找到 (作為 PowerShell 參數的備援)
+          ./configure --host=x86_64-w64-mingw32 --disable-nls --with-vpnc-script=vpnc-script-win.js
+          
+          echo "Compiling..."
+          make -j$(nproc)
+
+      - name: Smoke Test (Verify Binary)
+        run: |
+          export PATH="/mingw64/bin:$PATH"
+          cd source_code
+          
+          echo "Running Smoke Test..."
+          # 將需要的 DLL 路徑暫時加入 PATH 以便測試執行
+          export PATH="$(pwd)/.libs:/mingw64/bin:$PATH"
+          
+          # 測試是否能印出版本號，確認沒有缺 DLL
+          .libs/openconnect.exe --version
+          echo "Smoke Test Passed!"
+
+      - name: Bundle Artifacts (Deterministic)
+        run: |
+          mkdir release
+          cd source_code
+          
+          # 複製核心檔案
+          cp .libs/openconnect.exe ../release/
+          cp vpnc-script-win.js ../release/
+          
+          # [Codex 建議] 產生依賴清單並精確複製
+          echo "Collecting DLL dependencies..."
+          
+          # 1. 找出所有依賴的 DLL 路徑
+          ldd .libs/openconnect.exe | awk '/mingw64\/bin/ {print $3}' | sort -u > ../release/dll-list.txt
+          
+          # 2. 顯示清單 (在 Log 中可見)
+          cat ../release/dll-list.txt
+          
+          # 3. 複製清單中的檔案到 release 資料夾
+          # 使用 xargs 批次複製
+          xargs -a ../release/dll-list.txt -I{} cp {} ../release/
+          
+          echo "Build complete. Artifacts ready."
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenConnect-Standalone-Win64
+          path: release/*
