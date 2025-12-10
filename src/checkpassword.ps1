@@ -3,23 +3,16 @@ $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $My
 $RootDir = (Resolve-Path (Join-Path $ScriptRoot '..')).ProviderPath
 $LogFile = Join-Path $RootDir 'vpn_history.log'
 
-function Import-VpnLibrary {
-    param([string] $LogPath = $LogFile)
+# --- Load shared library ---
+$env:LOGFILE = $LogFile
 
-    try {
-        $env:LOGFILE = $LogPath
-        $LibPath = Join-Path $ScriptRoot 'lib\vpn_common.ps1'
-        if (Test-Path $LibPath) {
-            . $LibPath
-        } else {
-            Write-Host "Warning: lib not found: $LibPath"
-        }
-    } catch {
-        Write-Host "Failed to load lib: $_"
-    }
+$LibPath = Join-Path $ScriptRoot 'lib\vpn_common.ps1'
+if (Test-Path $LibPath) {
+    . $LibPath
+} else {
+    Write-Host "Error: lib not found at $LibPath"
+    exit 1
 }
-
-Import-VpnLibrary
 
 # 匯入憑證物件
 $CredentialPath = Join-Path $RootDir 'vpn_cred.xml'

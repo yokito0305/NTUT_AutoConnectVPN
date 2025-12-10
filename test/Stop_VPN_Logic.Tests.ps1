@@ -13,7 +13,7 @@ Describe 'Invoke-StopVpnLogic' {
         Invoke-StopVpnLogic -PidPath $pidPath -LogPath $logPath
 
         $logContent = Get-Content -Path $logPath -Raw
-        $logContent | Should -Match 'PID file not found'
+        $logContent | Should Match 'PID file not found'
     }
 
     It 'stops the monitored process when PID file exists' {

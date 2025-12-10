@@ -13,27 +13,17 @@ $PidFile      = Join-Path $WorkDir "vpn_service.pid"
 $LogFile      = Join-Path $WorkDir "vpn_history.log"
 
 # --- Shared helpers (dot-source library) ---
-function Import-VpnLibrary {
-    param(
-        [string] $LogPath = $LogFile
-    )
+# Set environment before dot-sourcing
+$env:LOGFILE = $LogFile
 
-    try {
-        # Ensure writers know where to write
-        $env:LOGFILE = $LogPath
-
-        $LibPath = Join-Path $ScriptRoot 'lib\vpn_common.ps1'
-        if (Test-Path $LibPath) {
-            . $LibPath
-        } else {
-            Write-Host "Warning: lib not found: $LibPath"
-        }
-    } catch {
-        Write-Host "Failed to load lib: $_"
-    }
+# Load shared functions from library
+$LibPath = Join-Path $ScriptRoot 'lib\vpn_common.ps1'
+if (Test-Path $LibPath) {
+    . $LibPath
+} else {
+    Write-Host "Error: lib not found at $LibPath"
+    exit 1
 }
-
-Import-VpnLibrary
 
 # --- Initialization helpers ---
 function Invoke-CredentialSetup {
@@ -183,6 +173,20 @@ function Monitor-OpenConnect {
 
     Write-Log "Attempting to connect to $TargetServer ..."
 
+    # Clean up any existing OpenConnect processes to ensure single instance
+    $existingProcesses = @(Get-Process 'openconnect' -ErrorAction SilentlyContinue)
+    if ($existingProcesses.Count -gt 0) {
+        Write-Log ("Cleaning up {0} existing OpenConnect process(es) before new connection" -f $existingProcesses.Count)
+        foreach ($p in $existingProcesses) {
+            try {
+                Stop-Process -Id $p.Id -Force -ErrorAction Stop
+            } catch {
+                Write-Log ("Failed to stop existing process (PID {0}): {1}" -f $p.Id, $_)
+            }
+        }
+        Start-Sleep -Seconds 2  # Give time for processes to fully terminate
+    }
+
     try {
         $startResult = Start-OpenConnect -Executable $Executable -Username $Username -TargetServer $TargetServer
         if (-not $startResult.Started) {
@@ -205,6 +209,20 @@ function Monitor-OpenConnect {
 
         $proc.WaitForExit()
         Write-Log "Warning: OpenConnect process ended (connection lost)."
+        Write-Host "VPN Connection Lost - Attempting to reconnect..." -ForegroundColor Yellow
+        
+        # Clean up any remaining OpenConnect processes before retry
+        $orphanedProcesses = @(Get-Process 'openconnect' -ErrorAction SilentlyContinue)
+        if ($orphanedProcesses.Count -gt 0) {
+            Write-Log ("Cleaning up {0} orphaned OpenConnect process(es)" -f $orphanedProcesses.Count)
+            foreach ($p in $orphanedProcesses) {
+                try {
+                    Stop-Process -Id $p.Id -Force -ErrorAction Stop
+                } catch {
+                    Write-Log ("Failed to stop orphaned process (PID {0}): {1}" -f $p.Id, $_)
+                }
+            }
+        }
     }
     catch {
         Write-Log ("Exception while starting OpenConnect: {0}" -f $_)
@@ -215,8 +233,25 @@ function Start-VpnService {
     $SetCredScript = Join-Path $ScriptRoot 'Set_VPN_Credential.ps1'
     $StatusScript = Join-Path $ScriptRoot 'Check_VPN_Status.ps1'
 
+    # Check if service is already running
+    if (Test-Path $PidFile) {
+        $ExistingPid = Get-Content $PidFile -ErrorAction SilentlyContinue
+        if ($ExistingPid -and (Get-Process -Id $ExistingPid -ErrorAction SilentlyContinue)) {
+            Write-Log "VPN monitor service is already running (PID: $ExistingPid)"
+            Write-Host "VPN monitor service is already running (PID: $ExistingPid). Exiting." -ForegroundColor Yellow
+            exit 0
+        } else {
+            Write-Log "Stale PID file found (PID: $ExistingPid). Cleaning up."
+            Remove-Item $PidFile -ErrorAction SilentlyContinue
+        }
+    }
+
     Set-WorkingContext -PidPath $PidFile -WorkingDirectory $WorkDir
     Write-Log "=== VPN monitor started (Service PID: $PID) ==="
+    Write-Host "VPN Monitor Service Started" -ForegroundColor Green
+    Write-Host "Note: VPN connections may be interrupted every 4 hours by the server." -ForegroundColor Yellow
+    Write-Host "      The service will automatically reconnect within 5 seconds." -ForegroundColor Yellow
+    Write-Host ""
 
     $CredCandidates = @((Join-Path $ScriptRoot 'vpn_cred.xml'), (Join-Path $WorkDir 'vpn_cred.xml'))
     $CredData = Get-CredentialData -Candidates $CredCandidates -SetupScript $SetCredScript
@@ -233,6 +268,7 @@ function Start-VpnService {
     while ($true) {
         Monitor-OpenConnect -Executable $OpenConnectExe -Username $User -Password $Password -TargetServer $Server -StatusScript $StatusScript -PidPath $PidFile
         Write-Log "Will retry connection in 5 seconds..."
+        Write-Host "Reconnecting in 5 seconds..." -ForegroundColor Cyan
         Start-Sleep -Seconds 5
     }
 }

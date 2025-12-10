@@ -7,23 +7,16 @@ $WorkDir = $RootDir
 $PidFile = Join-Path $WorkDir "vpn_service.pid"
 $LogFile = Join-Path $WorkDir "vpn_history.log"
 
-# Ensure Write-Log knows where to write when lib uses env var
+# --- Load shared library ---
 $env:LOGFILE = $LogFile
 
-function Import-VpnLibrary {
-    try {
-        $LibPath = Join-Path $ScriptRoot 'lib\vpn_common.ps1'
-        if (Test-Path $LibPath) {
-            . $LibPath
-        } else {
-            Write-Host "Warning: lib not found: $LibPath"
-        }
-    } catch {
-        Write-Host "Failed to load lib: $_"
-    }
+$LibPath = Join-Path $ScriptRoot 'lib\vpn_common.ps1'
+if (Test-Path $LibPath) {
+    . $LibPath
+} else {
+    Write-Host "Error: lib not found at $LibPath"
+    exit 1
 }
-
-Import-VpnLibrary
 
 function Invoke-StopVpnLogic {
     param(

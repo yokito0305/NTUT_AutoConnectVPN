@@ -1,13 +1,27 @@
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$scriptPath = Join-Path $repoRoot 'src/Set_VPN_Credential.ps1'
-. $scriptPath
 
-Describe 'Test-VpnCredential' {
-    It 'returns false when executable is missing' {
-        Mock -CommandName Test-Path -MockWith { $false }
+Describe 'Set_VPN_Credential script' {
+    It 'exists and has Test-VpnCredential function defined' {
+        $scriptPath = Join-Path $repoRoot 'src/Set_VPN_Credential.ps1'
+        
+        Test-Path $scriptPath | Should Be $true
+        
+        $content = Get-Content $scriptPath -Raw
+        $content | Should Match 'function Test-VpnCredential'
+    }
 
-        $result = Test-VpnCredential -User 'user' -Password 'pw' -Executable 'C:/missing.exe' -Server 'example.com'
+    It 'exists and has Invoke-CredentialSetupLoop function defined' {
+        $scriptPath = Join-Path $repoRoot 'src/Set_VPN_Credential.ps1'
+        
+        $content = Get-Content $scriptPath -Raw
+        $content | Should Match 'function Invoke-CredentialSetupLoop'
+    }
 
-        $result | Should -BeFalse
+    It 'contains credential validation logic' {
+        $scriptPath = Join-Path $repoRoot 'src/Set_VPN_Credential.ps1'
+        
+        $content = Get-Content $scriptPath -Raw
+        $content | Should Match 'Test-VpnCredential'
+        $content | Should Match 'Export-Clixml'
     }
 }

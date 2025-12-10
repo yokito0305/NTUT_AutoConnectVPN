@@ -1,11 +1,11 @@
 # Interactive credential setup for VPN
 # Run this script in a visible PowerShell window (double-click the .bat wrapper)
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$LibPath = Join-Path $ScriptDir 'lib\vpn_common.ps1'
+# --- Load shared library ---
+$ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
+$LibPath = Join-Path $ScriptRoot 'lib\vpn_common.ps1'
 if (Test-Path $LibPath) { . $LibPath }
 
-$ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
 $RootDir = (Resolve-Path (Join-Path $ScriptRoot '..')).ProviderPath
 $WorkDir = $RootDir
 $OpenConnectExe = "C:\Program Files\OpenConnect-GUI\openconnect.exe"

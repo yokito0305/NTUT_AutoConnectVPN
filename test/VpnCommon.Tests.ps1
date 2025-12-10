@@ -10,8 +10,8 @@ Describe 'vpn_common helpers' {
         Write-Log -Message 'hello world' -LogPath $logPath
 
         $content = Get-Content -Path $logPath -Raw
-        $content | Should -Match 'hello world'
-        $content | Should -Match '\d{4}-\d{2}-\d{2}'
+        $content | Should Match 'hello world'
+        $content | Should Match '\d{4}-\d{2}-\d{2}'
     }
 
     It 'converts secure strings back to plaintext' {
@@ -19,6 +19,6 @@ Describe 'vpn_common helpers' {
 
         $plain = SecureStringToPlainText $secure
 
-        $plain | Should -Be 'p@ssw0rd'
+        $plain | Should Be 'p@ssw0rd'
     }
 }
