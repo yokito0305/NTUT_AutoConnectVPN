@@ -1,4 +1,4 @@
-﻿# Original location: D:\Program Files\script\src\AutoVPN_Service.ps1
+# Original location: D:\Program Files\script\src\AutoVPN_Service.ps1
 
 # --- Configuration ---
 # Determine project root (parent of this script's folder) so scripts are relocatable
@@ -13,31 +13,29 @@ $PidFile      = Join-Path $WorkDir "vpn_service.pid"
 $LogFile      = Join-Path $WorkDir "vpn_history.log"
 
 # --- Shared helpers (dot-source library) ---
-# dot-source the shared library (vpn_common.ps1) located in lib\
-try {
-    $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+function Import-VpnLibrary {
+    param(
+        [string] $LogPath = $LogFile
+    )
 
-    # Ensure writers know where to write
-    $env:LOGFILE = $LogFile
+    try {
+        # Ensure writers know where to write
+        $env:LOGFILE = $LogPath
 
-    $LibPath = Join-Path $ScriptDir 'lib\vpn_common.ps1'
-    if (Test-Path $LibPath) { . $LibPath } else { Write-Host "Warning: lib not found: $LibPath" }
-} catch {
-    Write-Host "Failed to load lib: $_"
+        $LibPath = Join-Path $ScriptRoot 'lib\vpn_common.ps1'
+        if (Test-Path $LibPath) {
+            . $LibPath
+        } else {
+            Write-Host "Warning: lib not found: $LibPath"
+        }
+    } catch {
+        Write-Host "Failed to load lib: $_"
+    }
 }
 
-# --- Initialization ---
-# 1. Record current process ID to PID file
-$PID | Out-File -FilePath $PidFile -Force
+Import-VpnLibrary
 
-# 2. Set working directory
-Set-Location $WorkDir
-
-Write-Log "=== VPN monitor started (Service PID: $PID) ==="
-
-$SetCredScript = Join-Path $ScriptDir 'Set_VPN_Credential.ps1'
-$StatusScript = Join-Path $ScriptDir 'Check_VPN_Status.ps1'
-
+# --- Initialization helpers ---
 function Invoke-CredentialSetup {
     param([Parameter(Mandatory = $true)] [string] $SetupScript)
 
@@ -62,6 +60,7 @@ function Load-Credential {
         if ($cred -is [System.Management.Automation.PSCredential]) {
             return @{ Path = $credPath; Credential = $cred }
         }
+
         Write-Log "Imported credential was not a PSCredential object."
     } catch {
         Write-Log ("Failed to import credential file {0}: {1}" -f $credPath, $_)
@@ -70,98 +69,174 @@ function Load-Credential {
     return $null
 }
 
-# Credential handling: prefer credential in the script folder, fall back to $WorkDir
-$CredCandidates = @((Join-Path $ScriptDir 'vpn_cred.xml'), (Join-Path $WorkDir 'vpn_cred.xml'))
-$CredData = Load-Credential -Candidates $CredCandidates
+function Get-CredentialData {
+    param(
+        [Parameter(Mandatory = $true)] [string[]] $Candidates,
+        [Parameter(Mandatory = $true)] [string] $SetupScript
+    )
 
-if (-not $CredData) {
+    $credData = Load-Credential -Candidates $Candidates
+    if ($credData) { return $credData }
+
     Write-Log "No valid credential found. Triggering interactive setup."
-    Invoke-CredentialSetup -SetupScript $SetCredScript
-    $CredData = Load-Credential -Candidates $CredCandidates
+    Invoke-CredentialSetup -SetupScript $SetupScript
+    return (Load-Credential -Candidates $Candidates)
 }
 
-if (-not $CredData) {
-    Write-Host "Credential setup did not complete successfully. Service will exit." -ForegroundColor Yellow
-    exit
+function Set-WorkingContext {
+    param(
+        [string] $PidPath = $PidFile,
+        [string] $WorkingDirectory = $WorkDir
+    )
+
+    $PID | Out-File -FilePath $PidPath -Force
+    Set-Location $WorkingDirectory
 }
 
-$CredFile = $CredData.Path
-$credential = $CredData.Credential
-$User = $credential.UserName
-$Password = SecureStringToPlainText $credential.Password
+function Show-StatusWindow {
+    param([string] $StatusScript)
 
-# --- Main Loop ---
-while ($true) {
-    Write-Log "Attempting to connect to $Server ..."
-    
+    if (Test-Path $StatusScript) {
+        Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-File',"`"$StatusScript`"" -WindowStyle Normal
+    }
+}
+
+# --- OpenConnect operations ---
+function Start-OpenConnect {
+    param(
+        [string] $Executable,
+        [string] $Username,
+        [string] $TargetServer
+    )
+
+    $ocArgs = @(
+        '--protocol=gp',
+        "--user=$Username",
+        '--passwd-on-stdin',
+        $TargetServer
+    )
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $Executable
+    $psi.Arguments = ($ocArgs -join ' ')
+    $psi.RedirectStandardInput = $true
+    $psi.RedirectStandardOutput = $false
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+
+    $proc = New-Object System.Diagnostics.Process
+    $proc.StartInfo = $psi
+
+    [PSCustomObject]@{
+        Process = $proc
+        Started = $proc.Start()
+    }
+}
+
+function Send-PasswordToProcess {
+    param(
+        [System.Diagnostics.Process] $Process,
+        [string] $Password
+    )
+
     try {
-        # Start OpenConnect
-        # Build argument list for OpenConnect; be careful with quoting/escaping
-        $ocArgs = @(
-            '--protocol=gp',
-            "--user=$User",
-            '--passwd-on-stdin',
-            $Server
-        )
-        # Start OpenConnect using .NET Process so we can feed password to stdin
-        $argString = $ocArgs -join ' '
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = $OpenConnectExe
-        $psi.Arguments = $argString
-        $psi.RedirectStandardInput = $true
-        $psi.RedirectStandardOutput = $false
-        $psi.UseShellExecute = $false
-        $psi.CreateNoWindow = $true
+        $Process.StandardInput.WriteLine($Password)
+        $Process.StandardInput.Flush()
+        $Process.StandardInput.Close()
+    } catch {
+        Write-Log ("Failed to write password to OpenConnect stdin: {0}" -f $_)
+    }
+}
 
-        $proc = New-Object System.Diagnostics.Process
-        $proc.StartInfo = $psi
-        $started = $proc.Start()
-        if ($started) {
-            Write-Log ("Started OpenConnect (PID: {0})" -f $proc.Id)
-            # send password to stdin
-            try {
-                $proc.StandardInput.WriteLine($Password)
-                $proc.StandardInput.Flush()
-                $proc.StandardInput.Close()
-            } catch {
-                Write-Log ("Failed to write password to OpenConnect stdin: {0}" -f $_)
-            }
+function Handle-ImmediateExit {
+    param(
+        [System.Diagnostics.Process] $Process,
+        [string] $PidPath,
+        [string] $StatusScript
+    )
 
-            # brief wait then check if process is still running -> likely connected
-            Start-Sleep -Seconds 3
-            if (-not $proc.HasExited) {
-                Write-Log ("Connected: OpenConnect running (PID: {0})" -f $proc.Id)
-                # Launch status window to inform user of successful connection
-                if (Test-Path $StatusScript) {
-                    Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-File',"`"$StatusScript`"" -WindowStyle Normal
-                }
-            } else {
-                # Process exited immediately: treat as authentication/login failure and exit service
-                Write-Log ("Authentication/login failed: OpenConnect exited immediately (ExitCode: {0})" -f $proc.ExitCode)
-                if (Test-Path $StatusScript) {
-                    Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-File',"`"$StatusScript`"" -WindowStyle Normal
-                }
-                # Clean up PID file then exit (do not retry)
-                try {
-                    if (Test-Path $PidFile) { Remove-Item $PidFile -ErrorAction SilentlyContinue; Write-Log ("Removed PID file: {0}" -f $PidFile) }
-                } catch {
-                    Write-Log ("Failed to remove PID file: {0}" -f $_)
-                }
-                Write-Log "Service exiting due to authentication/login failure."
-                exit 1
-            }
+    Write-Log ("Authentication/login failed: OpenConnect exited immediately (ExitCode: {0})" -f $Process.ExitCode)
+    Show-StatusWindow -StatusScript $StatusScript
 
-            # wait for exit (blocks until disconnected)
-            $proc.WaitForExit()
-            Write-Log "Warning: OpenConnect process ended (connection lost)."
-        } else {
-            Write-Log "Failed to start OpenConnect process."
+    try {
+        if (Test-Path $PidPath) {
+            Remove-Item $PidPath -ErrorAction SilentlyContinue
+            Write-Log ("Removed PID file: {0}" -f $PidPath)
         }
+    } catch {
+        Write-Log ("Failed to remove PID file: {0}" -f $_)
+    }
+
+    Write-Log "Service exiting due to authentication/login failure."
+    exit 1
+}
+
+function Monitor-OpenConnect {
+    param(
+        [string] $Executable,
+        [string] $Username,
+        [string] $Password,
+        [string] $TargetServer,
+        [string] $StatusScript,
+        [string] $PidPath
+    )
+
+    Write-Log "Attempting to connect to $TargetServer ..."
+
+    try {
+        $startResult = Start-OpenConnect -Executable $Executable -Username $Username -TargetServer $TargetServer
+        if (-not $startResult.Started) {
+            Write-Log "Failed to start OpenConnect process."
+            return
+        }
+
+        $proc = $startResult.Process
+        Write-Log ("Started OpenConnect (PID: {0})" -f $proc.Id)
+
+        Send-PasswordToProcess -Process $proc -Password $Password
+
+        Start-Sleep -Seconds 3
+        if (-not $proc.HasExited) {
+            Write-Log ("Connected: OpenConnect running (PID: {0})" -f $proc.Id)
+            Show-StatusWindow -StatusScript $StatusScript
+        } else {
+            Handle-ImmediateExit -Process $proc -PidPath $PidPath -StatusScript $StatusScript
+        }
+
+        $proc.WaitForExit()
+        Write-Log "Warning: OpenConnect process ended (connection lost)."
     }
     catch {
         Write-Log ("Exception while starting OpenConnect: {0}" -f $_)
     }
+}
 
-    Write-Log "Will retry connection in 5 seconds..."
-    Start-Sleep -Seconds 5
+function Start-VpnService {
+    $SetCredScript = Join-Path $ScriptRoot 'Set_VPN_Credential.ps1'
+    $StatusScript = Join-Path $ScriptRoot 'Check_VPN_Status.ps1'
+
+    Set-WorkingContext -PidPath $PidFile -WorkingDirectory $WorkDir
+    Write-Log "=== VPN monitor started (Service PID: $PID) ==="
+
+    $CredCandidates = @((Join-Path $ScriptRoot 'vpn_cred.xml'), (Join-Path $WorkDir 'vpn_cred.xml'))
+    $CredData = Get-CredentialData -Candidates $CredCandidates -SetupScript $SetCredScript
+
+    if (-not $CredData) {
+        Write-Host "Credential setup did not complete successfully. Service will exit." -ForegroundColor Yellow
+        exit
+    }
+
+    $credential = $CredData.Credential
+    $User = $credential.UserName
+    $Password = SecureStringToPlainText $credential.Password
+
+    while ($true) {
+        Monitor-OpenConnect -Executable $OpenConnectExe -Username $User -Password $Password -TargetServer $Server -StatusScript $StatusScript -PidPath $PidFile
+        Write-Log "Will retry connection in 5 seconds..."
+        Start-Sleep -Seconds 5
+    }
+}
+
+if ($MyInvocation.InvocationName -ne '.') {
+    Start-VpnService
 }

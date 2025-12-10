@@ -1,4 +1,4 @@
-﻿# Interactive credential setup for VPN
+# Interactive credential setup for VPN
 # Run this script in a visible PowerShell window (double-click the .bat wrapper)
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -29,7 +29,6 @@ function Test-VpnCredential {
         return $false
     }
 
-    $plainPassword = $Password
     $ocArgs = @(
         '--protocol=gp',
         "--user=$User",
@@ -51,7 +50,7 @@ function Test-VpnCredential {
     $proc = New-Object System.Diagnostics.Process
     $proc.StartInfo = $psi
     $null = $proc.Start()
-    $proc.StandardInput.WriteLine($plainPassword)
+    $proc.StandardInput.WriteLine($Password)
     $proc.StandardInput.Flush()
     $proc.StandardInput.Close()
 
@@ -73,34 +72,40 @@ function Test-VpnCredential {
     return $false
 }
 
-Write-Host "VPN Credential Setup"
+function Invoke-CredentialSetupLoop {
+    Write-Host "VPN Credential Setup"
 
-while ($true) {
-    $User = Read-Host "Enter VPN username"
-    $PlainPassword = Read-Host "Enter VPN password"
+    while ($true) {
+        $User = Read-Host "Enter VPN username"
+        $PlainPassword = Read-Host "Enter VPN password"
 
-    Write-Host "驗證中，請稍候 ..." -ForegroundColor Cyan
-    $isValid = Test-VpnCredential -User $User -Password $PlainPassword -Executable $OpenConnectExe -Server $Server
+        Write-Host "驗證中，請稍候 ..." -ForegroundColor Cyan
+        $isValid = Test-VpnCredential -User $User -Password $PlainPassword -Executable $OpenConnectExe -Server $Server
 
-    if (-not $isValid) {
-        Write-Host "登入失敗，請重新輸入帳號與密碼。" -ForegroundColor Red
-        if (Get-Command Write-Log -ErrorAction SilentlyContinue) { Write-Log ("Credential validation failed for user {0}" -f $User) }
-        continue
+        if (-not $isValid) {
+            Write-Host "登入失敗，請重新輸入帳號與密碼。" -ForegroundColor Red
+            if (Get-Command Write-Log -ErrorAction SilentlyContinue) { Write-Log ("Credential validation failed for user {0}" -f $User) }
+            continue
+        }
+
+        # Convert plaintext password to SecureString and create credential
+        $SecurePassword = ConvertTo-SecureString -String $PlainPassword -AsPlainText -Force
+        $cred = New-Object System.Management.Automation.PSCredential ($User, $SecurePassword)
+        try {
+            $cred | Export-Clixml -Path $CredFile
+            Write-Host "Credential saved to $CredFile"
+            if (Get-Command Write-Log -ErrorAction SilentlyContinue) { Write-Log ("Saved credential for user {0} to {1}" -f $User, $CredFile) }
+            break
+        } catch {
+            Write-Host "Failed to save credential: $_" -ForegroundColor Red
+            if (Get-Command Write-Log -ErrorAction SilentlyContinue) { Write-Log ("Failed to save credential: {0}" -f $_) }
+        }
     }
 
-    # Convert plaintext password to SecureString and create credential
-    $SecurePassword = ConvertTo-SecureString -String $PlainPassword -AsPlainText -Force
-    $cred = New-Object System.Management.Automation.PSCredential ($User, $SecurePassword)
-    try {
-        $cred | Export-Clixml -Path $CredFile
-        Write-Host "Credential saved to $CredFile"
-        if (Get-Command Write-Log -ErrorAction SilentlyContinue) { Write-Log ("Saved credential for user {0} to {1}" -f $User, $CredFile) }
-        break
-    } catch {
-        Write-Host "Failed to save credential: $_" -ForegroundColor Red
-        if (Get-Command Write-Log -ErrorAction SilentlyContinue) { Write-Log ("Failed to save credential: {0}" -f $_) }
-    }
+    Write-Host "Setup complete. You can now run Start_VPN.bat to start the service (hidden)."
+    Start-Sleep -Seconds 2
 }
 
-Write-Host "Setup complete. You can now run Start_VPN.bat to start the service (hidden)."
-Start-Sleep -Seconds 2
+if ($MyInvocation.InvocationName -ne '.') {
+    Invoke-CredentialSetupLoop
+}
