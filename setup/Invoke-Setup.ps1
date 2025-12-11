@@ -9,6 +9,7 @@ param(
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
 $ProjectRoot = (Resolve-Path (Join-Path $ScriptRoot '..')).ProviderPath
 $BinDir = Join-Path $ProjectRoot 'bin'
+$OpenConnectInstalled = $false
 
 Write-Host ""
 Write-Host "==== AutoVPN Setup Script ====" -ForegroundColor Magenta
@@ -20,6 +21,7 @@ if ($PSVersionTable.PSVersion.Major -lt 5) {
     Write-Host "ERROR: PowerShell 5.1+ required" -ForegroundColor Red
     exit 1
 }
+
 Write-Host "OK" -ForegroundColor Green
 
 # Download OpenConnect from GitHub Release
@@ -38,8 +40,11 @@ else {
 
     # Check if openconnect.exe already exists
     $ocExePath = Join-Path $BinDir 'openconnect.exe'
+    $OpenConnectInstalled = $false
+
     if (Test-Path $ocExePath) {
         Write-Host "Already installed at $ocExePath" -ForegroundColor Green
+        $OpenConnectInstalled = $true
     }
     else {
         # Download latest release from GitHub
@@ -53,6 +58,7 @@ else {
             if (-not $release.assets) {
                 Write-Host "No release assets found" -ForegroundColor Red
                 Write-Host "Manual installation required" -ForegroundColor Yellow
+                exit 1
             }
             else {
                 # Find the specific OpenConnect binary package
@@ -84,6 +90,8 @@ else {
                         if (Test-Path (Join-Path $BinDir 'openconnect.exe')) {
                             Write-Host "Installation successful!" -ForegroundColor Green
                             Write-Host "Installed to: $BinDir" -ForegroundColor Green
+
+                            $OpenConnectInstalled = $true
                             
                             # List installed files count
                             $fileCount = (Get-ChildItem $BinDir).Count
@@ -103,6 +111,7 @@ else {
                     Write-Host "No .zip package found in release assets" -ForegroundColor Yellow
                     Write-Host "Available assets: $($release.assets.name -join ', ')" -ForegroundColor Gray
                     Write-Host "Manual installation required" -ForegroundColor Yellow
+                    exit 1
                 }
             }
         }
@@ -110,8 +119,14 @@ else {
             Write-Host "ERROR: Failed to download - $_" -ForegroundColor Red
             Write-Host "Manual installation: https://github.com/$GitHubRepo/releases" -ForegroundColor Yellow
             Write-Host "Extract all files (EXE + DLLs) to: $BinDir" -ForegroundColor Yellow
+            exit 1
         }
     }
+}
+
+if (-not $SkipOpenConnect -and -not $OpenConnectInstalled) {
+    Write-Host "ERROR: OpenConnect was not installed. Please install manually and rerun setup." -ForegroundColor Red
+    exit 1
 }
 
 # Check config
