@@ -50,36 +50,19 @@ jobs:
 
       - name: Configure and Build
         run: |
-          # [Codex 建議] 強制優先使用 MinGW64 binary 路徑，避免混用
           export PATH="/mingw64/bin:$PATH"
-          
           cd source_code
           ./autogen.sh
           
-          # [Codex 建議] 設定 vpnc-script 預設路徑
-          # 這裡我們使用相對路徑 'vpnc-script-win.js'，
-          # 這樣只要腳本跟 exe 在同一層目錄，理論上就能找到 (作為 PowerShell 參數的備援)
+          # 設定 vpnc-script 相對路徑
           ./configure --host=x86_64-w64-mingw32 --disable-nls --with-vpnc-script=vpnc-script-win.js
           
           echo "Compiling..."
           make -j$(nproc)
 
-      - name: Smoke Test (Verify Binary)
+      - name: Bundle Artifacts (Recursive Dependency Copy)
         run: |
-          export PATH="/mingw64/bin:$PATH"
-          cd source_code
-          
-          echo "Running Smoke Test..."
-          # 將需要的 DLL 路徑暫時加入 PATH 以便測試執行
-          export PATH="$(pwd)/.libs:/mingw64/bin:$PATH"
-          
-          # 測試是否能印出版本號，確認沒有缺 DLL
-          .libs/openconnect.exe --version
-          echo "Smoke Test Passed!"
-
-      - name: Bundle Artifacts
-        run: |
-          mkdir release
+          mkdir -p release
           cd source_code
           
           # 1. 複製主程式與腳本
@@ -94,43 +77,63 @@ jobs:
           fi
 
           cd ../release
-          
-          echo "Collecting DLL dependencies..."
-          
-          # [修正] 3. 使用更積極的方式抓取依賴 (遞迴查詢)
-          # 使用 ldd 列出所有相依檔案，不論路徑為何，只要是 .dll 就抓出來
-          # 並過濾掉 Windows 系統內建的 (如 KERNEL32.dll, ntdll.dll)
-          ldd openconnect.exe | grep '\.dll' | grep -v -i '/c/windows/' | awk '{print $3}' | sort -u > dll-list.txt
-          
-          # 4. 強制複製 MinGW 核心 Runtime (這是您目前最可能缺少的)
-          # 即使 ldd 沒列出來，我們也要強制從系統路徑複製過來以防萬一
-          CORE_LIBS=(
-            "libwinpthread-1.dll"
-            "libgcc_s_seh-1.dll"
-            "libstdc++-6.dll"
-            "libssp-0.dll"
-          )
-          
-          for lib in "${CORE_LIBS[@]}"; do
-            # 尋找檔案位置 (通常在 /mingw64/bin)
-            lib_path=$(find /mingw64/bin -name "$lib" | head -n 1)
-            if [ ! -z "$lib_path" ]; then
-              echo "Force including runtime: $lib"
-              cp "$lib_path" .
-            else
-              echo "Warning: Could not find runtime $lib"
-            fi
-          done
+          echo "Starting Recursive DLL Copy..."
 
-          # 5. 複製 ldd 找出的其他 DLL
-          echo "Copying detected dependencies..."
-          xargs -a dll-list.txt -I{} cp -u {} . 2>/dev/null || true
+          # [修正重點] 遞迴依賴檢查腳本
+          # 只要還有新的 DLL 被複製進來，就繼續檢查
+          FOUND_NEW=1
+          iteration=0
           
-          # 顯示最終打包清單 (方便除錯)
-          echo "=== Final Artifact Content ==="
-          ls -1
+          while [ $FOUND_NEW -eq 1 ]; do
+            FOUND_NEW=0
+            iteration=$((iteration+1))
+            echo "Iteration $iteration: Checking dependencies..."
+
+            # 找出目前目錄下所有的 exe 和 dll
+            BINARIES=$(find . -maxdepth 1 -name "*.exe" -o -name "*.dll")
+
+            for BIN in $BINARIES; do
+              # 使用 ldd 列出依賴
+              # 1. grep "/mingw64/": 只抓 MinGW 的庫，忽略 Windows 系統庫
+              # 2. grep -v "not found": 忽略找不到的錯誤
+              # 3. awk '{print $3}': 抓取檔案絕對路徑
+              DEPS=$(ldd "$BIN" | grep "/mingw64/" | grep -v "not found" | awk '{print $3}' | sort -u)
+
+              for DEP_PATH in $DEPS; do
+                DEP_NAME=$(basename "$DEP_PATH")
+                
+                # 如果目標資料夾還沒有這個 DLL，就複製進來
+                if [ ! -f "$DEP_NAME" ]; then
+                  echo "  [+] Found new dependency: $DEP_NAME (from $BIN)"
+                  cp "$DEP_PATH" .
+                  FOUND_NEW=1
+                fi
+              done
+            done
+          done
           
-          echo "Build complete. Artifacts ready."
+          echo "Dependency copy complete."
+          echo "=== Final File List ==="
+          ls -lh
+
+      - name: Real Environment Test (Verify Bundle)
+        run: |
+          echo "Testing the standalone bundle..."
+          cd release
+          
+          # [修正重點] 模擬純淨環境
+          # 我們故意不將 /mingw64/bin 加入 PATH，強迫 exe 只能讀取當前目錄的 DLL
+          # 如果這裡成功，代表打包是完整的
+          
+          export PATH=".:$PATH" # 僅加入當前目錄 (Linux/Bash 風格)或是依賴 Windows 預設行為
+          
+          # 嘗試執行版本檢查
+          if ./openconnect.exe --version | grep "OpenConnect"; then
+            echo "SUCCESS: The standalone bundle works!"
+          else
+            echo "FAILURE: The bundle is missing dependencies."
+            exit 1
+          fi
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
