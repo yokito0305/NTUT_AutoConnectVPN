@@ -1,4 +1,4 @@
-# Interactive credential setup for VPN
+﻿# Interactive credential setup for VPN
 # Run this script in a visible PowerShell window (double-click the .bat wrapper)
 
 # --- Load shared library ---
@@ -33,7 +33,7 @@ function Test-VpnCredential {
         [Parameter(Mandatory = $true)] [string] $Password,
         [Parameter(Mandatory = $true)] [string] $Executable,
         [Parameter(Mandatory = $true)] [string] $Server,
-        [Parameter(Mandatory = $true)] [string] $Protocol = 'gp',
+        [string] $Protocol = 'gp',
         [int] $TimeoutSeconds = 20
     )
 
@@ -43,7 +43,7 @@ function Test-VpnCredential {
     }
 
     $ocArgs = @(
-        '--protocol=gp',
+        "--protocol=$Protocol",
         "--user=$User",
         '--passwd-on-stdin',
         '--authenticate',
@@ -122,3 +122,4 @@ function Invoke-CredentialSetupLoop {
 if ($MyInvocation.InvocationName -ne '.') {
     Invoke-CredentialSetupLoop
 }
+

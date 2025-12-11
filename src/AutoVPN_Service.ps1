@@ -1,4 +1,4 @@
-# Original location: D:\Program Files\script\src\AutoVPN_Service.ps1
+﻿# Original location: D:\Program Files\script\src\AutoVPN_Service.ps1
 
 # --- Configuration ---
 # Determine project root (parent of this script's folder) so scripts are relocatable
