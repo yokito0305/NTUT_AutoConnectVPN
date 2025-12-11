@@ -105,7 +105,9 @@ jobs:
                 # 如果目標資料夾還沒有這個 DLL，就複製進來
                 if [ ! -f "$DEP_NAME" ]; then
                   echo "  [+] Found new dependency: $DEP_NAME (from $BIN)"
-                  cp "$DEP_PATH" . || echo "Warning: Failed to copy $DEP_PATH"
+                  if ! cp "$DEP_PATH" .; then
+                    echo "  [!] Warning: Failed to copy $DEP_PATH"
+                  fi
                   FOUND_NEW=1
                 fi
               done
