@@ -4,8 +4,19 @@
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
 $RootDir = (Resolve-Path (Join-Path $ScriptRoot '..')).ProviderPath
 $WorkDir = $RootDir
-$PidFile = Join-Path $WorkDir "vpn_service.pid"
-$LogFile = Join-Path $WorkDir "vpn_history.log"
+
+# Load configuration
+$ConfigPath = Join-Path $RootDir 'config\config.ps1'
+if (Test-Path $ConfigPath) {
+    . $ConfigPath
+} else {
+    Write-Host "Error: configuration file not found at $ConfigPath"
+    exit 1
+}
+
+# Get configuration values
+$PidFile = Get-VpnConfig -ConfigKey 'PidFile' -RootDir $RootDir
+$LogFile = Get-VpnConfig -ConfigKey 'LogFile' -RootDir $RootDir
 
 # --- Load shared library ---
 $env:LOGFILE = $LogFile
@@ -26,9 +37,7 @@ function Invoke-StopVpnLogic {
 
     $env:LOGFILE = $LogPath
 
-    try { Write-Log "Stop_VPN invoked via batch" } catch { }
-
-    if (Test-Path $PidPath) {
+    try { Write-Log "Stop_VPN invoked via batch" } catch { }    if (Test-Path $PidPath) {
         $ServicePid = Get-Content $PidPath
         try {
             Stop-Process -Id $ServicePid -Force -ErrorAction Stop

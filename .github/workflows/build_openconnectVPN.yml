@@ -85,8 +85,16 @@ jobs:
           # 複製核心檔案
           cp .libs/openconnect.exe ../release/
           cp vpnc-script-win.js ../release/
+
+          if [ -f "COPYING" ]; then
+            cp COPYING ../release/LICENSE.txt
+          elif [ -f "COPYING.LGPL" ]; then
+            cp COPYING.LGPL ../release/LICENSE.txt
+          fi
+
+          cd ../release
           
-          # [Codex 建議] 產生依賴清單並精確複製
+          # 產生依賴清單並精確複製
           echo "Collecting DLL dependencies..."
           
           # 1. 找出所有依賴的 DLL 路徑

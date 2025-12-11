@@ -5,12 +5,27 @@
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
 $RootDir = (Resolve-Path (Join-Path $ScriptRoot '..')).ProviderPath
 $WorkDir = $RootDir
-$OpenConnectExe = "C:\Program Files\OpenConnect-GUI\openconnect.exe"
 
-# VPN Info
-$Server = "vpn.ntut.edu.tw"
-$PidFile      = Join-Path $WorkDir "vpn_service.pid"
-$LogFile      = Join-Path $WorkDir "vpn_history.log"
+# Load configuration
+$ConfigPath = Join-Path $RootDir 'config\config.ps1'
+if (Test-Path $ConfigPath) {
+    . $ConfigPath
+} else {
+    Write-Host "Error: configuration file not found at $ConfigPath"
+    exit 1
+}
+
+# Get configuration values
+$OpenConnectExe = Get-VpnConfig -ConfigKey 'OpenConnectExe' -RootDir $RootDir
+$Server = Get-VpnConfig -ConfigKey 'VpnServer' -RootDir $RootDir
+$PidFile = Get-VpnConfig -ConfigKey 'PidFile' -RootDir $RootDir
+$LogFile = Get-VpnConfig -ConfigKey 'LogFile' -RootDir $RootDir
+$Protocol = Get-VpnConfig -ConfigKey 'VpnProtocol' -RootDir $RootDir
+
+# Validate configuration
+if (-not (Test-VpnConfig)) {
+    exit 1
+}
 
 # --- Shared helpers (dot-source library) ---
 # Set environment before dot-sourcing
@@ -96,11 +111,12 @@ function Start-OpenConnect {
     param(
         [string] $Executable,
         [string] $Username,
-        [string] $TargetServer
+        [string] $TargetServer,
+        [string] $Protocol = 'gp'
     )
 
     $ocArgs = @(
-        '--protocol=gp',
+        "--protocol=$Protocol",
         "--user=$Username",
         '--passwd-on-stdin',
         $TargetServer
@@ -168,7 +184,8 @@ function Monitor-OpenConnect {
         [string] $Password,
         [string] $TargetServer,
         [string] $StatusScript,
-        [string] $PidPath
+        [string] $PidPath,
+        [string] $Protocol = 'gp'
     )
 
     Write-Log "Attempting to connect to $TargetServer ..."
@@ -188,7 +205,7 @@ function Monitor-OpenConnect {
     }
 
     try {
-        $startResult = Start-OpenConnect -Executable $Executable -Username $Username -TargetServer $TargetServer
+        $startResult = Start-OpenConnect -Executable $Executable -Username $Username -TargetServer $TargetServer -Protocol $Protocol
         if (-not $startResult.Started) {
             Write-Log "Failed to start OpenConnect process."
             return
@@ -265,11 +282,13 @@ function Start-VpnService {
     $User = $credential.UserName
     $Password = SecureStringToPlainText $credential.Password
 
+    $ReconnectDelay = Get-VpnConfig -ConfigKey 'ReconnectDelay' -RootDir $RootDir
+
     while ($true) {
-        Monitor-OpenConnect -Executable $OpenConnectExe -Username $User -Password $Password -TargetServer $Server -StatusScript $StatusScript -PidPath $PidFile
-        Write-Log "Will retry connection in 5 seconds..."
-        Write-Host "Reconnecting in 5 seconds..." -ForegroundColor Cyan
-        Start-Sleep -Seconds 5
+        Monitor-OpenConnect -Executable $OpenConnectExe -Username $User -Password $Password -TargetServer $Server -StatusScript $StatusScript -PidPath $PidFile -Protocol $Protocol
+        Write-Log "Will retry connection in $ReconnectDelay seconds..."
+        Write-Host "Reconnecting in $ReconnectDelay seconds..." -ForegroundColor Cyan
+        Start-Sleep -Seconds $ReconnectDelay
     }
 }
 

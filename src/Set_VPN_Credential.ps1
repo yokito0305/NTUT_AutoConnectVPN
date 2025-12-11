@@ -3,16 +3,28 @@
 
 # --- Load shared library ---
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
+$RootDir = (Resolve-Path (Join-Path $ScriptRoot '..')).ProviderPath
+
+# Load configuration
+$ConfigPath = Join-Path $RootDir 'config\config.ps1'
+if (Test-Path $ConfigPath) {
+    . $ConfigPath
+} else {
+    Write-Host "Error: configuration file not found at $ConfigPath"
+    exit 1
+}
+
+# Load library
 $LibPath = Join-Path $ScriptRoot 'lib\vpn_common.ps1'
 if (Test-Path $LibPath) { . $LibPath }
 
-$RootDir = (Resolve-Path (Join-Path $ScriptRoot '..')).ProviderPath
+# Get configuration values
 $WorkDir = $RootDir
-$OpenConnectExe = "C:\Program Files\OpenConnect-GUI\openconnect.exe"
-$Server = "vpn.ntut.edu.tw"
-# Save credential to root `WorkDir` so service started from .bat finds it
-$CredFile = Join-Path $WorkDir 'vpn_cred.xml'
-$LogFile = Join-Path $WorkDir 'vpn_history.log'
+$OpenConnectExe = Get-VpnConfig -ConfigKey 'OpenConnectExe' -RootDir $RootDir
+$Server = Get-VpnConfig -ConfigKey 'VpnServer' -RootDir $RootDir
+$Protocol = Get-VpnConfig -ConfigKey 'VpnProtocol' -RootDir $RootDir
+$CredFile = Get-VpnConfig -ConfigKey 'CredentialFile' -RootDir $RootDir
+$LogFile = Get-VpnConfig -ConfigKey 'LogFile' -RootDir $RootDir
 $env:LOGFILE = $LogFile
 
 function Test-VpnCredential {
@@ -21,6 +33,7 @@ function Test-VpnCredential {
         [Parameter(Mandatory = $true)] [string] $Password,
         [Parameter(Mandatory = $true)] [string] $Executable,
         [Parameter(Mandatory = $true)] [string] $Server,
+        [Parameter(Mandatory = $true)] [string] $Protocol = 'gp',
         [int] $TimeoutSeconds = 20
     )
 
@@ -80,7 +93,7 @@ function Invoke-CredentialSetupLoop {
         $PlainPassword = Read-Host "Enter VPN password"
 
         Write-Host "驗證中，請稍候 ..." -ForegroundColor Cyan
-        $isValid = Test-VpnCredential -User $User -Password $PlainPassword -Executable $OpenConnectExe -Server $Server
+        $isValid = Test-VpnCredential -User $User -Password $PlainPassword -Executable $OpenConnectExe -Server $Server -Protocol $Protocol
 
         if (-not $isValid) {
             Write-Host "登入失敗，請重新輸入帳號與密碼。" -ForegroundColor Red
