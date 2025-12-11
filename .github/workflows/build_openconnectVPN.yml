@@ -3,7 +3,7 @@ name: Build OpenConnect
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 0' # 每週日自動執行
+    - cron: '0 0 1 * *' # 每月1日自動執行
 
 jobs:
   build:
@@ -105,7 +105,7 @@ jobs:
                 # 如果目標資料夾還沒有這個 DLL，就複製進來
                 if [ ! -f "$DEP_NAME" ]; then
                   echo "  [+] Found new dependency: $DEP_NAME (from $BIN)"
-                  cp "$DEP_PATH" .
+                  cp "$DEP_PATH" . || echo "Warning: Failed to copy $DEP_PATH"
                   FOUND_NEW=1
                 fi
               done
