@@ -1,4 +1,37 @@
-﻿# Original location: D:\Program Files\script\src\AutoVPN_Service.ps1
+# Original location: D:\Program Files\script\src\AutoVPN_Service.ps1
+
+param(
+    [switch] $AlreadyElevated
+)
+
+function Test-IsAdministrator {
+    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($currentUser)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Ensure-Elevation {
+    param(
+        [switch] $HiddenWindow
+    )
+
+    if (Test-IsAdministrator) { return }
+
+    if ($AlreadyElevated) {
+        Write-Host "Elevation requested but administrative privileges were not granted." -ForegroundColor Red
+        exit 1
+    }
+
+    $windowStyle = if ($HiddenWindow) { 'Hidden' } else { 'Normal' }
+    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-AlreadyElevated')
+    Start-Process -FilePath 'powershell.exe' -Verb RunAs -WindowStyle $windowStyle -ArgumentList $argList
+    exit
+}
+
+# Elevate once when launched directly; keep background hidden by default
+if ($MyInvocation.InvocationName -ne '.') {
+    Ensure-Elevation -HiddenWindow
+}
 
 # --- Configuration ---
 # Determine project root (parent of this script's folder) so scripts are relocatable
