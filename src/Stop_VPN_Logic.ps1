@@ -1,4 +1,32 @@
-﻿# 檔案名稱: D:\Program Files\script\src\Stop_VPN_Logic.ps1
+# 檔案名稱: D:\Program Files\script\src\Stop_VPN_Logic.ps1
+
+param(
+    [switch] $AlreadyElevated
+)
+
+function Test-IsAdministrator {
+    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($currentUser)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Ensure-Elevation {
+    if (Test-IsAdministrator) { return }
+
+    if ($AlreadyElevated) {
+        Write-Host "Unable to obtain administrative privileges to stop VPN." -ForegroundColor Red
+        exit 1
+    }
+
+    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-AlreadyElevated')
+    Start-Process -FilePath 'powershell.exe' -Verb RunAs -WindowStyle Hidden -ArgumentList $argList
+    exit
+}
+
+# Elevate once when invoked directly to avoid repeated prompts when chained
+if ($MyInvocation.InvocationName -ne '.') {
+    Ensure-Elevation
+}
 
 # Determine project root (parent of this script's folder) so scripts are relocatable
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
