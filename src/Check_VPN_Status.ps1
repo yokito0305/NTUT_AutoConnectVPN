@@ -1,5 +1,16 @@
 ﻿# File: D:\Program Files\script\src\Check_VPN_Status.ps1
 
+# --- Configuration ---
+# Determine project root
+$ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
+$RootDir = (Resolve-Path (Join-Path $ScriptRoot '..')).ProviderPath
+
+# Load configuration
+$ConfigPath = Join-Path $RootDir 'config\config.ps1'
+if (Test-Path $ConfigPath) {
+    . $ConfigPath
+}
+
 function Show-VpnStatus {
     param(
         [string] $ProcessName = 'openconnect'

@@ -1,11 +1,50 @@
-# 檔案名稱: D:\Program Files\script\src\Stop_VPN_Logic.ps1
+﻿# 檔案名稱: D:\Program Files\script\src\Stop_VPN_Logic.ps1
+
+param(
+    [switch] $AlreadyElevated
+)
+
+function Test-IsAdministrator {
+    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($currentUser)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Assert-Elevation {
+    if (Test-IsAdministrator) { return }
+
+    if ($AlreadyElevated) {
+        Write-Host "Unable to obtain administrative privileges to stop VPN." -ForegroundColor Red
+        exit 1
+    }
+
+    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-AlreadyElevated')
+    Start-Process -FilePath 'powershell.exe' -Verb RunAs -WindowStyle Hidden -ArgumentList $argList
+    exit
+}
+
+# Elevate once when invoked directly to avoid repeated prompts when chained
+if ($MyInvocation.InvocationName -ne '.') {
+    Ensure-Elevation
+}
 
 # Determine project root (parent of this script's folder) so scripts are relocatable
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
 $RootDir = (Resolve-Path (Join-Path $ScriptRoot '..')).ProviderPath
 $WorkDir = $RootDir
-$PidFile = Join-Path $WorkDir "vpn_service.pid"
-$LogFile = Join-Path $WorkDir "vpn_history.log"
+
+# Load configuration
+$ConfigPath = Join-Path $RootDir 'config\config.ps1'
+if (Test-Path $ConfigPath) {
+    . $ConfigPath
+} else {
+    Write-Host "Error: configuration file not found at $ConfigPath"
+    exit 1
+}
+
+# Get configuration values
+$PidFile = Get-VpnConfig -ConfigKey 'PidFile' -RootDir $RootDir
+$LogFile = Get-VpnConfig -ConfigKey 'LogFile' -RootDir $RootDir
 
 # --- Load shared library ---
 $env:LOGFILE = $LogFile
@@ -26,9 +65,7 @@ function Invoke-StopVpnLogic {
 
     $env:LOGFILE = $LogPath
 
-    try { Write-Log "Stop_VPN invoked via batch" } catch { }
-
-    if (Test-Path $PidPath) {
+    try { Write-Log "Stop_VPN invoked via batch" } catch { }    if (Test-Path $PidPath) {
         $ServicePid = Get-Content $PidPath
         try {
             Stop-Process -Id $ServicePid -Force -ErrorAction Stop

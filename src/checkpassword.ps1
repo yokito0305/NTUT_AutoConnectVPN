@@ -1,4 +1,4 @@
-# 載入共用函式（如果已存在於 src\lib）
+﻿# 載入共用函式（如果已存在於 src\lib）
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Definition }
 $RootDir = (Resolve-Path (Join-Path $ScriptRoot '..')).ProviderPath
 $LogFile = Join-Path $RootDir 'vpn_history.log'
