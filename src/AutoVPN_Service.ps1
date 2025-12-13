@@ -1,4 +1,4 @@
-# Original location: D:\Program Files\script\src\AutoVPN_Service.ps1
+﻿# Original location: D:\Program Files\script\src\AutoVPN_Service.ps1
 
 param(
     [switch] $AlreadyElevated

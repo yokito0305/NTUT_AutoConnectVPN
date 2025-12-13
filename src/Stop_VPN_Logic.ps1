@@ -1,4 +1,4 @@
-# 檔案名稱: D:\Program Files\script\src\Stop_VPN_Logic.ps1
+﻿# 檔案名稱: D:\Program Files\script\src\Stop_VPN_Logic.ps1
 
 param(
     [switch] $AlreadyElevated
@@ -10,7 +10,7 @@ function Test-IsAdministrator {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-function Ensure-Elevation {
+function Assert-Elevation {
     if (Test-IsAdministrator) { return }
 
     if ($AlreadyElevated) {

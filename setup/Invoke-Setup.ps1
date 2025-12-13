@@ -1,4 +1,4 @@
-# AutoVPN Setup Script
+﻿# AutoVPN Setup Script
 # Downloads compiled OpenConnect from GitHub and validates configuration
 
 param(
@@ -63,7 +63,7 @@ else {
             else {
                 # Find the specific OpenConnect binary package
                 # We look for 'OpenConnect-Standalone-Win64.zip' specifically to avoid downloading source code or other assets
-                $zipAsset = $release.assets | Where-Object { $_.name -match 'OpenConnect.*Win64.*\.zip' } | Select-Object -First 1
+                $zipAsset = $release.assets | Where-Object { $_.name -match 'openconnect.*win64.*\.zip' } | Select-Object -First 1
                 
                 if ($zipAsset) {
                     $downloadUrl = $zipAsset.browser_download_url
