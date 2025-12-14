@@ -1,4 +1,4 @@
-$repoRoot = Split-Path -Parent $PSScriptRoot
+﻿$repoRoot = Split-Path -Parent $PSScriptRoot
 $scriptPath = Join-Path $repoRoot 'src/Check_VPN_Status.ps1'
 . $scriptPath
 

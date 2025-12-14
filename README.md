@@ -25,6 +25,8 @@ cd NTUT_AutoConnectVPN
 .\setup.bat
 ```
 
+詳見 `setup\README.md`。
+
 **setup.bat 會自動：**
 1. 下載最新的 OpenConnect 編譯版本到 `bin` 資料夾
 2. 驗證配置檔案
@@ -81,23 +83,6 @@ cd NTUT_AutoConnectVPN
 
 詳細說明見 `config\README.md` 和 `config\QUICKREF.md`。
 
-### 開發者設定
-
-若從 Git Clone 版本開發，可執行：
-
-```powershell
-# 下載最新的 OpenConnect 編譯版本
-.\setup\Invoke-Setup.ps1
-
-# 僅驗證配置（不下載）
-.\setup\Invoke-Setup.ps1 -SkipOpenConnect
-
-# 執行單元測試
-cd .\test
-Invoke-Pester
-```
-
-詳見 `setup\README.md`。
 
 ### 版本間的差異
 

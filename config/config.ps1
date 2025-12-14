@@ -1,4 +1,4 @@
-# Configuration file for AutoVPN
+﻿# Configuration file for AutoVPN
 # This file centralizes all VPN and OpenConnect settings
 
 # === OpenConnect Executable Path ===
@@ -44,11 +44,11 @@ $global:Config_CredentialFileName = "vpn_cred.xml"
 # === Reconnection Settings ===
 # Delay (in seconds) between reconnection attempts
 # Server typically disconnects every 4 hours
-$global:Config_ReconnectDelaySeconds = 10
+$global:Config_ReconnectDelaySeconds = 5
 
 # === Process Cleanup ===
 # Delay (in seconds) after killing processes to allow full termination
-$global:Config_ProcessTerminationDelaySeconds = 2
+$global:Config_ProcessTerminationDelaySeconds = 3
 
 # === Function to get full paths ===
 function Get-VpnConfig {

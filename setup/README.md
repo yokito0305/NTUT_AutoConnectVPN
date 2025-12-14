@@ -15,19 +15,11 @@ setup\Start-Setup.bat
 ### 方法 2: PowerShell 命令列
 
 ```powershell
-cd "D:\Program Files\AutoVPN\setup"
+cd "C:\costum\path\AutoVPN\setup"
 powershell -NoProfile -ExecutionPolicy Bypass -File "Invoke-Setup.ps1"
 ```
 
-### 方法 3: 跳過 OpenConnect 下載
-
-僅驗證配置，不下載二進位檔案：
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "Invoke-Setup.ps1" -SkipOpenConnect
-```
-
-### 方法 4: 指定自訂 GitHub Repository
+### 方法 3: 指定自訂 GitHub Repository
 
 如果您維護自己的 OpenConnect 編譯版本：
 
@@ -49,7 +41,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "Invoke-Setup.ps1" -GitHubRe
 5. 顯示安裝狀態和後續步驟
 
 **參數**:
-- `-SkipOpenConnect` - 跳過 OpenConnect 下載，僅驗證配置
+- `-SkipOpenConnect` - 跳過 OpenConnect 下載，僅驗證完整性
 - `-GitHubRepo` - 指定 GitHub Repository (預設: yokito0305/NTUT_AutoConnectVPN)
 
 **範例**:
@@ -57,7 +49,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "Invoke-Setup.ps1" -GitHubRe
 # 完整安裝
 . .\Invoke-Setup.ps1
 
-# 跳過下載，僅驗證配置
+# 跳過下載，僅驗證完整性
 . .\Invoke-Setup.ps1 -SkipOpenConnect
 
 # 使用自訂 Repository

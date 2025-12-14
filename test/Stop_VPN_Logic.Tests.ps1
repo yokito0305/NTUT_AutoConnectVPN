@@ -1,4 +1,4 @@
-$repoRoot = Split-Path -Parent $PSScriptRoot
+﻿$repoRoot = Split-Path -Parent $PSScriptRoot
 $libPath = Join-Path $repoRoot 'src/lib/vpn_common.ps1'
 $scriptPath = Join-Path $repoRoot 'src/Stop_VPN_Logic.ps1'
 . $libPath

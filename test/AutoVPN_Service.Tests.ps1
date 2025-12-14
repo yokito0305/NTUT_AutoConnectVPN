@@ -1,4 +1,4 @@
-$repoRoot = Split-Path -Parent $PSScriptRoot
+﻿$repoRoot = Split-Path -Parent $PSScriptRoot
 $autoScript = Join-Path $repoRoot 'src/AutoVPN_Service.ps1'
 . $autoScript
 

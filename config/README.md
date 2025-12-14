@@ -29,9 +29,9 @@ AutoVPN/
 
 **變數名稱**: `$Config_OpenConnectExe`
 
-**預設值**: `C:\Program Files\OpenConnect-GUI\openconnect.exe`
+**預設值**: `.\bin\openconnect.exe`
 
-**說明**: OpenConnect-GUI 應用程式的完整路徑。如果您將 OpenConnect 安裝在不同位置，需要修改此值。
+**說明**: OpenConnect 應用程式的完整路徑。如果您將 OpenConnect 安裝在不同位置，需要修改此值。
 
 **範例**:
 ```powershell
@@ -88,9 +88,9 @@ $global:Config_VpnProtocol = "anyconnect"
 
 **變數名稱**: `$Config_ReconnectDelaySeconds`
 
-**預設值**: `10`
+**預設值**: `5`
 
-**說明**: VPN 斷開後等待多少秒再嘗試重新連接。VPN 伺服器通常每 4 小時強制斷開一次，建議設置為 10 秒以避免頻繁重試。
+**說明**: VPN 斷開後等待多少秒再嘗試重新連接。VPN 伺服器通常每 4 小時強制斷開一次，建議可設置為 10 秒以避免頻繁重試。
 
 **範例**:
 ```powershell
