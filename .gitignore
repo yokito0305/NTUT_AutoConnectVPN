@@ -3,3 +3,5 @@ bin/
 *.xml
 *.log
 *.pid
+AGENTS.md
+.codex/

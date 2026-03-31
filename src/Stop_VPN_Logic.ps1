@@ -1,4 +1,4 @@
-﻿# 檔案名稱: D:\Program Files\script\src\Stop_VPN_Logic.ps1
+# 檔案名稱: D:\Program Files\script\src\Stop_VPN_Logic.ps1
 
 param(
     [switch] $AlreadyElevated

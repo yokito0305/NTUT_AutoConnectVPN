@@ -1,4 +1,4 @@
-﻿# Interactive credential setup for VPN
+# Interactive credential setup for VPN
 # Run this script in a visible PowerShell window (double-click the .bat wrapper)
 
 # --- Load shared library ---
@@ -19,7 +19,6 @@ $LibPath = Join-Path $ScriptRoot 'lib\vpn_common.ps1'
 if (Test-Path $LibPath) { . $LibPath }
 
 # Get configuration values
-$WorkDir = $RootDir
 $OpenConnectExe = Get-VpnConfig -ConfigKey 'OpenConnectExe' -RootDir $RootDir
 $Server = Get-VpnConfig -ConfigKey 'VpnServer' -RootDir $RootDir
 $Protocol = Get-VpnConfig -ConfigKey 'VpnProtocol' -RootDir $RootDir
@@ -28,6 +27,11 @@ $LogFile = Get-VpnConfig -ConfigKey 'LogFile' -RootDir $RootDir
 $env:LOGFILE = $LogFile
 
 function Test-VpnCredential {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSAvoidUsingPlainTextForPassword',
+        '',
+        Justification = 'Credential validation must pass a plaintext password to openconnect via stdin. The password is later converted to SecureString before being persisted.'
+    )]
     param(
         [Parameter(Mandatory = $true)] [string] $User,
         [Parameter(Mandatory = $true)] [string] $Password,

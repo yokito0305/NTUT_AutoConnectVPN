@@ -1,4 +1,4 @@
-﻿# Configuration file for AutoVPN
+# Configuration file for AutoVPN
 # This file centralizes all VPN and OpenConnect settings
 
 # === OpenConnect Executable Path ===

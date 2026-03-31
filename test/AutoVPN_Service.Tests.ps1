@@ -1,4 +1,4 @@
-﻿$repoRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent $PSScriptRoot
 $autoScript = Join-Path $repoRoot 'src/AutoVPN_Service.ps1'
 . $autoScript
 
@@ -85,6 +85,8 @@ Describe 'AutoVPN_Service OpenConnect operations' {
         $psi = $result.Process.StartInfo
         $psi.FileName | Should Be 'cmd.exe'
         $psi.RedirectStandardInput | Should Be $true
+        $psi.RedirectStandardOutput | Should Be $true
+        $psi.RedirectStandardError | Should Be $true
         $psi.UseShellExecute | Should Be $false
         $psi.CreateNoWindow | Should Be $true
 

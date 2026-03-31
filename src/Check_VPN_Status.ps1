@@ -1,4 +1,4 @@
-﻿# File: D:\Program Files\script\src\Check_VPN_Status.ps1
+# File: D:\Program Files\script\src\Check_VPN_Status.ps1
 
 # --- Configuration ---
 # Determine project root

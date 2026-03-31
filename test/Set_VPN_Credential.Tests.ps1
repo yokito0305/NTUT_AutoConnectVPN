@@ -1,4 +1,4 @@
-﻿$repoRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent $PSScriptRoot
 
 Describe 'Set_VPN_Credential script' {
     It 'exists and has Test-VpnCredential function defined' {

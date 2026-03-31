@@ -1,4 +1,4 @@
-﻿# AutoVPN Setup Script
+# AutoVPN Setup Script
 # Downloads compiled OpenConnect from GitHub and validates configuration
 
 param(

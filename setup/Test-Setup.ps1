@@ -1,4 +1,4 @@
-﻿# Test-Setup.ps1
+# Test-Setup.ps1
 # Verify AutoVPN setup completion
 
 [CmdletBinding()]

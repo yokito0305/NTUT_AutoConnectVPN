@@ -1,4 +1,4 @@
-﻿# Original location: D:\Program Files\script\src\AutoVPN_Service.ps1
+# Original location: D:\Program Files\script\src\AutoVPN_Service.ps1
 
 param(
     [switch] $AlreadyElevated
@@ -159,7 +159,8 @@ function Start-OpenConnect {
     $psi.FileName = $Executable
     $psi.Arguments = ($ocArgs -join ' ')
     $psi.RedirectStandardInput = $true
-    $psi.RedirectStandardOutput = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow = $true
 
@@ -172,7 +173,68 @@ function Start-OpenConnect {
     }
 }
 
+function Register-OpenConnectOutputLogging {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Diagnostics.Process] $Process
+    )
+
+    $stdoutHandler = [System.Diagnostics.DataReceivedEventHandler]{
+        param($eventSource, $eventArgs)
+
+        if (-not [string]::IsNullOrWhiteSpace($eventArgs.Data)) {
+            Write-Log ("[openconnect][stdout] {0}" -f $eventArgs.Data)
+        }
+    }
+
+    $stderrHandler = [System.Diagnostics.DataReceivedEventHandler]{
+        param($eventSource, $eventArgs)
+
+        if (-not [string]::IsNullOrWhiteSpace($eventArgs.Data)) {
+            Write-Log ("[openconnect][stderr] {0}" -f $eventArgs.Data)
+        }
+    }
+
+    $Process.add_OutputDataReceived($stdoutHandler)
+    $Process.add_ErrorDataReceived($stderrHandler)
+
+    $Process.BeginOutputReadLine()
+    $Process.BeginErrorReadLine()
+
+    return [PSCustomObject]@{
+        StdOutHandler = $stdoutHandler
+        StdErrHandler = $stderrHandler
+    }
+}
+
+function Unregister-OpenConnectOutputLogging {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Diagnostics.Process] $Process,
+
+        [Parameter(Mandatory = $true)]
+        [psobject] $Handlers
+    )
+
+    try {
+        if ($Handlers.StdOutHandler) {
+            $Process.remove_OutputDataReceived($Handlers.StdOutHandler)
+        }
+
+        if ($Handlers.StdErrHandler) {
+            $Process.remove_ErrorDataReceived($Handlers.StdErrHandler)
+        }
+    } catch {
+        Write-Log ("Failed to detach OpenConnect log handlers: {0}" -f $_)
+    }
+}
+
 function Send-PasswordToProcess {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSAvoidUsingPlainTextForPassword',
+        '',
+        Justification = 'OpenConnect requires a plaintext password on stdin. The password remains encrypted at rest and is converted only for the final handoff to the child process.'
+    )]
     param(
         [System.Diagnostics.Process] $Process,
         [string] $Password
@@ -187,7 +249,7 @@ function Send-PasswordToProcess {
     }
 }
 
-function Handle-ImmediateExit {
+function Invoke-ImmediateExit {
     param(
         [System.Diagnostics.Process] $Process,
         [string] $PidPath,
@@ -211,6 +273,11 @@ function Handle-ImmediateExit {
 }
 
 function Monitor-OpenConnect {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSAvoidUsingPlainTextForPassword',
+        '',
+        Justification = 'The password remains encrypted at rest and is converted only for the final handoff to the child process.'
+    )]
     param(
         [string] $Executable,
         [string] $Username,
@@ -246,6 +313,7 @@ function Monitor-OpenConnect {
 
         $proc = $startResult.Process
         Write-Log ("Started OpenConnect (PID: {0})" -f $proc.Id)
+        $logHandlers = Register-OpenConnectOutputLogging -Process $proc
 
         Send-PasswordToProcess -Process $proc -Password $Password
 
@@ -254,11 +322,11 @@ function Monitor-OpenConnect {
             Write-Log ("Connected: OpenConnect running (PID: {0})" -f $proc.Id)
             Show-StatusWindow -StatusScript $StatusScript
         } else {
-            Handle-ImmediateExit -Process $proc -PidPath $PidPath -StatusScript $StatusScript
+            Invoke-ImmediateExit -Process $proc -PidPath $PidPath -StatusScript $StatusScript
         }
 
         $proc.WaitForExit()
-        Write-Log "Warning: OpenConnect process ended (connection lost)."
+        Write-Log ("Warning: OpenConnect process ended (ExitCode: {0}). Connection lost or tunnel closed." -f $proc.ExitCode)
         Write-Host "VPN Connection Lost - Attempting to reconnect..." -ForegroundColor Yellow
         
         # Clean up any remaining OpenConnect processes before retry
@@ -276,6 +344,11 @@ function Monitor-OpenConnect {
     }
     catch {
         Write-Log ("Exception while starting OpenConnect: {0}" -f $_)
+    }
+    finally {
+        if ($proc -and $logHandlers) {
+            Unregister-OpenConnectOutputLogging -Process $proc -Handlers $logHandlers
+        }
     }
 }
 
