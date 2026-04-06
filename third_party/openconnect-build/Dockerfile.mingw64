@@ -1,0 +1,25 @@
+FROM quay.io/fedora/fedora:42
+
+ARG WINTUNDRIVER=wintun-0.14.1.zip
+ARG WINTUNSHA256=07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51
+
+RUN dnf update -y && \
+    dnf install -y 'dnf-command(copr)' && \
+    dnf -y copr enable dwmw2/openconnect && \
+    dnf install --setopt=install_weak_deps=False -y \
+        git autoconf automake libtool gettext make \
+        ocserv crypto-policies-scripts socat ppp rsync diffutils \
+        cmake jq findutils file which mingw64-filesystem && \
+    dnf clean packages && \
+    dnf install --setopt=install_weak_deps=False -y \
+        mingw64-gnutls mingw64-openssl mingw64-libxml2 mingw64-zlib \
+        mingw64-gcc mingw64-gcc-c++ mingw64-p11-kit mingw64-filesystem \
+        mingw64-openconnect mingw64-spdlog wine.x86_64 mingw64-nsis \
+        mingw32-nsiswrapper binutils curl unzip && \
+    dnf remove -y dosbox sane-backends sane-airscan webrtc-audio-processing \
+        speex twolame-libs sound-theme-freedesktop mesa-vulkan-drivers \
+        mesa-va-drivers wine-dxvk wine-dxvk-dxgi && \
+    dnf clean all && \
+    mkdir -p /opt && \
+    curl -L "https://www.wintun.net/builds/${WINTUNDRIVER}" -o "/opt/${WINTUNDRIVER}" && \
+    echo "${WINTUNSHA256}  /opt/${WINTUNDRIVER}" | sha256sum -c

@@ -1,7 +1,11 @@
 .vscode/
 bin/
+out/
 *.xml
 *.log
 *.pid
+vpn_state.json
+vpn_stop_requested.flag
+vpn_config_cache.json
 AGENTS.md
 .codex/

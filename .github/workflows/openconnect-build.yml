@@ -1,0 +1,52 @@
+name: openconnect-build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.gitmodules'
+      - '.github/workflows/openconnect-build.yml'
+      - 'third_party/openconnect'
+      - 'third_party/openconnect-build/**'
+
+jobs:
+  build-win64-gnutls:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:42
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          dnf update -y
+          dnf install -y 'dnf-command(copr)'
+          dnf -y copr enable dwmw2/openconnect
+          dnf install --setopt=install_weak_deps=False -y \
+            git autoconf automake libtool gettext make \
+            ocserv crypto-policies-scripts socat ppp rsync diffutils \
+            cmake jq findutils file which mingw64-filesystem
+          dnf clean packages
+          dnf install --setopt=install_weak_deps=False -y \
+            mingw64-gnutls mingw64-openssl mingw64-libxml2 mingw64-zlib \
+            mingw64-gcc mingw64-gcc-c++ mingw64-p11-kit mingw64-filesystem \
+            mingw64-openconnect mingw64-spdlog wine.x86_64 mingw64-nsis mingw32-nsiswrapper binutils
+          dnf remove -y dosbox sane-backends sane-airscan webrtc-audio-processing speex twolame-libs sound-theme-freedesktop \
+            mesa-vulkan-drivers mesa-va-drivers wine-dxvk wine-dxvk-dxgi
+          dnf clean all
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build Windows runtime
+        run: |
+          chmod +x third_party/openconnect-build/build-openconnect-win64.sh
+          chmod +x third_party/openconnect-build/stage-openconnect-runtime.sh
+          third_party/openconnect-build/build-openconnect-win64.sh
+
+      - name: Upload runtime artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openconnect-win64-runtime
+          path: out/openconnect-win64

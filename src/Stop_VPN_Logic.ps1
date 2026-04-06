@@ -25,7 +25,7 @@ function Assert-Elevation {
 
 # Elevate once when invoked directly to avoid repeated prompts when chained
 if ($MyInvocation.InvocationName -ne '.') {
-    Ensure-Elevation
+    Assert-Elevation
 }
 
 # Determine project root (parent of this script's folder) so scripts are relocatable
@@ -45,6 +45,8 @@ if (Test-Path $ConfigPath) {
 # Get configuration values
 $PidFile = Get-VpnConfig -ConfigKey 'PidFile' -RootDir $RootDir
 $LogFile = Get-VpnConfig -ConfigKey 'LogFile' -RootDir $RootDir
+$StateFile = Get-VpnConfig -ConfigKey 'StateFile' -RootDir $RootDir
+$StopRequestFile = Get-VpnConfig -ConfigKey 'StopRequestFile' -RootDir $RootDir
 
 # --- Load shared library ---
 $env:LOGFILE = $LogFile
@@ -57,44 +59,93 @@ if (Test-Path $LibPath) {
     exit 1
 }
 
+foreach ($modulePath in @(
+    (Join-Path $ScriptRoot 'lib\network_config_models.ps1'),
+    (Join-Path $ScriptRoot 'lib\network_config.ps1')
+)) {
+    if (-not (Test-Path $modulePath)) {
+        Write-Host "Error: module not found at $modulePath"
+        exit 1
+    }
+
+    . $modulePath
+}
+
 function Invoke-StopVpnLogic {
     param(
         [string] $PidPath = $PidFile,
-        [string] $LogPath = $LogFile
+        [string] $LogPath = $LogFile,
+        [string] $StatePath = $StateFile,
+        [string] $StopRequestPath = $StopRequestFile
     )
 
     $env:LOGFILE = $LogPath
+    $existingState = Read-VpnRuntimeState -StatePath $StatePath
 
-    try { Write-Log "Stop_VPN invoked via batch" } catch { }    if (Test-Path $PidPath) {
-        $ServicePid = Get-Content $PidPath
-        try {
-            Stop-Process -Id $ServicePid -Force -ErrorAction Stop
-            Write-Log ("Stopped monitor script (PID: {0}) by Stop_VPN_Logic.ps1" -f $ServicePid)
-        } catch {
-            Write-Log ("Failed to stop monitor script (PID: {0}): {1}" -f $ServicePid, $_)
+    try {
+        Write-LogEvent -Segments @('service', 'stop') -Message 'Stop_VPN invoked via batch' -LogPath $LogPath
+    } catch {
+    }
+
+    Set-VpnStopRequest -RequestPath $StopRequestPath
+
+    if (Test-Path $PidPath) {
+        $ServicePid = Get-Content $PidPath -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($ServicePid) {
+            try {
+                Stop-Process -Id $ServicePid -Force -ErrorAction Stop
+                Write-LogEvent -Segments @('service', 'stop') -Message ("Stopped monitor script (PID: {0}) by Stop_VPN_Logic.ps1" -f $ServicePid) -LogPath $LogPath
+            } catch {
+                Write-LogEvent -Segments @('service', 'stop') -Message ("Failed to stop monitor script (PID: {0}): {1}" -f $ServicePid, $_) -LogPath $LogPath
+            }
+        } else {
+            Write-LogEvent -Segments @('service', 'stop') -Message ("PID file was empty or unreadable: {0}" -f $PidPath) -LogPath $LogPath
         }
 
         try {
             Remove-Item $PidPath -Force
-            Write-Log ("Removed PID file: {0}" -f $PidPath)
+            Write-LogEvent -Segments @('service', 'stop') -Message ("Removed PID file: {0}" -f $PidPath) -LogPath $LogPath
         } catch {
-            Write-Log ("Failed to remove PID file {0}: {1}" -f $PidPath, $_)
+            Write-LogEvent -Segments @('service', 'stop') -Message ("Failed to remove PID file {0}: {1}" -f $PidPath, $_) -LogPath $LogPath
         }
     } else {
-        Write-Log "Stop requested but PID file not found: $PidPath"
+        Write-LogEvent -Segments @('service', 'stop') -Message "Stop requested but PID file not found: $PidPath" -LogPath $LogPath
     }
 
     $oc = Get-Process openconnect -ErrorAction SilentlyContinue
     if ($oc) {
         try {
             $oc | Stop-Process -Force -ErrorAction Stop
-            Write-Log (("Stopped OpenConnect processes (count: {0})" -f $($oc.Count)))
+            Write-LogEvent -Segments @('openconnect', 'stop') -Message (("Stopped OpenConnect processes (count: {0})" -f $($oc.Count))) -LogPath $LogPath
         } catch {
-            Write-Log (("Failed to stop OpenConnect processes: {0}" -f $_))
+            Write-LogEvent -Segments @('openconnect', 'stop') -Message (("Failed to stop OpenConnect processes: {0}" -f $_)) -LogPath $LogPath
         }
     } else {
-        Write-Log "No OpenConnect process found to stop."
+        Write-LogEvent -Segments @('openconnect', 'stop') -Message 'No OpenConnect process found to stop.' -LogPath $LogPath
     }
+
+    if ($existingState -and $existingState.network_config_plan) {
+        try {
+            $routeReverted = Invoke-NetworkConfigurationRouteRevert -Plan $existingState.network_config_plan -LogPath $LogPath
+            if (-not $routeReverted) {
+                Write-LogEvent -Segments @('network-config', 'route-revert') -Message 'No owned route changes required rollback.' -LogPath $LogPath
+            }
+        } catch {
+            Write-LogEvent -Segments @('network-config', 'route-revert') -Message ("Failed to revert owned routes: {0}" -f $_) -LogPath $LogPath
+        }
+
+        try {
+            $dnsReverted = Invoke-NetworkConfigurationDnsRevert -Plan $existingState.network_config_plan -LogPath $LogPath
+            if (-not $dnsReverted) {
+                Write-LogEvent -Segments @('network-config', 'dns-revert') -Message 'No owned adapter-scoped DNS changes required rollback.' -LogPath $LogPath
+            }
+        } catch {
+            Write-LogEvent -Segments @('network-config', 'dns-revert') -Message ("Failed to revert adapter-scoped DNS: {0}" -f $_) -LogPath $LogPath
+        }
+    }
+
+    Write-VpnRuntimeState -StatePath $StatePath -ServiceState 'stopped' -SessionState 'stopped' -Reason 'Startup protection cleared by Stop_VPN.bat.' -ServicePid 0 -OpenConnectPid 0 -ConnectedAt $null -StartupBlocked $false -StartupBlockCategory $null
+    Write-LogEvent -Segments @('service', 'guard') -Message 'Cleared protective startup block and reset runtime state.' -LogPath $LogPath
 }
 
 if ($MyInvocation.InvocationName -ne '.') {
